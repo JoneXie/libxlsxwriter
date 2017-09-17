@@ -3313,6 +3313,70 @@ _write_drawings(lxw_worksheet *self)
 }
 
 /*
+ * Write the <formula1> element for numbers.
+ */
+STATIC void
+_worksheet_write_formula_1_num(lxw_worksheet *self)
+{
+    lxw_xml_data_element(self->file, "formula1", "0", NULL);
+}
+
+/*
+ * Write the <dataValidation> element.
+ */
+STATIC void
+_worksheet_write_data_validation(lxw_worksheet *self)
+{
+    struct xml_attribute_list attributes;
+    struct xml_attribute *attribute;
+    char type[] = "whole";
+    char operator[] = "greaterThan";
+    char allow_blank[] = "1";
+    char show_input_message[] = "1";
+    char show_error_message[] = "1";
+    char sqref[] = "A1";
+
+    LXW_INIT_ATTRIBUTES();
+    LXW_PUSH_ATTRIBUTES_STR("type", type);
+    LXW_PUSH_ATTRIBUTES_STR("operator", operator);
+    LXW_PUSH_ATTRIBUTES_STR("allowBlank", allow_blank);
+    LXW_PUSH_ATTRIBUTES_STR("showInputMessage", show_input_message);
+    LXW_PUSH_ATTRIBUTES_STR("showErrorMessage", show_error_message);
+    LXW_PUSH_ATTRIBUTES_STR("sqref", sqref);
+
+    lxw_xml_start_tag(self->file, "dataValidation", &attributes);
+
+    /* Write the formula_1 element. */
+    _worksheet_write_formula_1_num(self);
+
+    lxw_xml_end_tag(self->file, "dataValidation");
+
+    LXW_FREE_ATTRIBUTES();
+}
+
+/*
+ * Write the <dataValidations> element.
+ */
+STATIC void
+_worksheet_write_data_validations(lxw_worksheet *self)
+{
+    struct xml_attribute_list attributes;
+    struct xml_attribute *attribute;
+
+    LXW_INIT_ATTRIBUTES();
+    LXW_PUSH_ATTRIBUTES_INT("count", 1);
+
+    lxw_xml_start_tag(self->file, "dataValidations", &attributes);
+
+    /* Write the dataValidation element. */
+    _worksheet_write_data_validation(self);
+
+    lxw_xml_end_tag(self->file, "dataValidations");
+
+    LXW_FREE_ATTRIBUTES();
+}
+
+/*
  * Assemble and write the XML file.
  */
 void
@@ -3353,6 +3417,10 @@ lxw_worksheet_assemble_xml_file(lxw_worksheet *self)
 
     /* Write the mergeCells element. */
     _worksheet_write_merge_cells(self);
+
+    /* Write the dataValidations element. */
+    if (self->num_validations)
+        _worksheet_write_data_validations(self);
 
     /* Write the hyperlink element. */
     _worksheet_write_hyperlinks(self);

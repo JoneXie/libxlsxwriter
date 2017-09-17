@@ -416,6 +416,7 @@ typedef struct lxw_worksheet {
     uint8_t vba_codename;
     uint8_t vcenter;
     uint8_t zoom_scale_normal;
+    uint8_t num_validations;
 
     lxw_color_t tab_color;
 
@@ -2634,6 +2635,7 @@ STATIC void _worksheet_write_print_options(lxw_worksheet *worksheet);
 STATIC void _worksheet_write_sheet_pr(lxw_worksheet *worksheet);
 STATIC void _worksheet_write_tab_color(lxw_worksheet *worksheet);
 STATIC void _worksheet_write_sheet_protection(lxw_worksheet *worksheet);
+STATIC void _chart_write_data_validations(lxw_worksheet *self);
 #endif /* TESTING */
 
 /* *INDENT-OFF* */
