@@ -123,6 +123,11 @@ lxw_worksheet_new(lxw_worksheet_init_data *init_data)
     GOTO_LABEL_ON_MEM_ERROR(worksheet->selections, mem_error);
     STAILQ_INIT(worksheet->selections);
 
+    worksheet->data_validations =
+        calloc(1, sizeof(struct lxw_data_validations));
+    GOTO_LABEL_ON_MEM_ERROR(worksheet->data_validations, mem_error);
+    STAILQ_INIT(worksheet->data_validations);
+
     worksheet->external_hyperlinks = calloc(1, sizeof(struct lxw_rel_tuples));
     GOTO_LABEL_ON_MEM_ERROR(worksheet->external_hyperlinks, mem_error);
     STAILQ_INIT(worksheet->external_hyperlinks);
@@ -280,6 +285,7 @@ lxw_worksheet_free(lxw_worksheet *worksheet)
     lxw_merged_range *merged_range;
     lxw_image_options *image_options;
     lxw_selection *selection;
+    lxw_data_validation *data_validation;
     lxw_rel_tuple *relationship;
 
     if (!worksheet)
@@ -359,6 +365,16 @@ lxw_worksheet_free(lxw_worksheet *worksheet)
         }
 
         free(worksheet->selections);
+    }
+
+    if (worksheet->data_validations) {
+        while (!STAILQ_EMPTY(worksheet->data_validations)) {
+            data_validation = STAILQ_FIRST(worksheet->data_validations);
+            STAILQ_REMOVE_HEAD(worksheet->data_validations, list_pointers);
+            free(data_validation);
+        }
+
+        free(worksheet->data_validations);
     }
 
     /* TODO. Add function for freeing the relationship lists. */
@@ -3325,24 +3341,28 @@ _worksheet_write_formula_1_num(lxw_worksheet *self)
  * Write the <dataValidation> element.
  */
 STATIC void
-_worksheet_write_data_validation(lxw_worksheet *self)
+_worksheet_write_data_validation(lxw_worksheet *self,
+                                 lxw_data_validation *data_validation)
 {
     struct xml_attribute_list attributes;
     struct xml_attribute *attribute;
     char type[] = "whole";
     char operator[] = "greaterThan";
-    char allow_blank[] = "1";
-    char show_input_message[] = "1";
-    char show_error_message[] = "1";
-    char sqref[] = "A1";
 
     LXW_INIT_ATTRIBUTES();
     LXW_PUSH_ATTRIBUTES_STR("type", type);
     LXW_PUSH_ATTRIBUTES_STR("operator", operator);
-    LXW_PUSH_ATTRIBUTES_STR("allowBlank", allow_blank);
-    LXW_PUSH_ATTRIBUTES_STR("showInputMessage", show_input_message);
-    LXW_PUSH_ATTRIBUTES_STR("showErrorMessage", show_error_message);
-    LXW_PUSH_ATTRIBUTES_STR("sqref", sqref);
+
+    if (data_validation->ignore_blank)
+        LXW_PUSH_ATTRIBUTES_STR("allowBlank", "1");
+
+    if (data_validation->show_input)
+        LXW_PUSH_ATTRIBUTES_STR("showInputMessage", "1");
+
+    if (data_validation->show_error)
+        LXW_PUSH_ATTRIBUTES_STR("showErrorMessage", "1");
+
+    LXW_PUSH_ATTRIBUTES_STR("sqref", data_validation->sqref);
 
     lxw_xml_start_tag(self->file, "dataValidation", &attributes);
 
@@ -3362,14 +3382,20 @@ _worksheet_write_data_validations(lxw_worksheet *self)
 {
     struct xml_attribute_list attributes;
     struct xml_attribute *attribute;
+    lxw_data_validation *data_validation;
+
+    if (self->num_validations == 0)
+        return;
 
     LXW_INIT_ATTRIBUTES();
-    LXW_PUSH_ATTRIBUTES_INT("count", 1);
+    LXW_PUSH_ATTRIBUTES_INT("count", self->num_validations);
 
     lxw_xml_start_tag(self->file, "dataValidations", &attributes);
 
-    /* Write the dataValidation element. */
-    _worksheet_write_data_validation(self);
+    STAILQ_FOREACH(data_validation, self->data_validations, list_pointers) {
+        /* Write the dataValidation element. */
+        _worksheet_write_data_validation(self, data_validation);
+    }
 
     lxw_xml_end_tag(self->file, "dataValidations");
 
@@ -3419,8 +3445,7 @@ lxw_worksheet_assemble_xml_file(lxw_worksheet *self)
     _worksheet_write_merge_cells(self);
 
     /* Write the dataValidations element. */
-    if (self->num_validations)
-        _worksheet_write_data_validations(self);
+    _worksheet_write_data_validations(self);
 
     /* Write the hyperlink element. */
     _worksheet_write_hyperlinks(self);
@@ -5089,4 +5114,32 @@ worksheet_insert_chart(lxw_worksheet *self,
                        lxw_row_t row_num, lxw_col_t col_num, lxw_chart *chart)
 {
     return worksheet_insert_chart_opt(self, row_num, col_num, chart, NULL);
+}
+
+/*
+ * Add a data validation to a worksheet.
+ */
+lxw_error
+worksheet_data_validation_cell(lxw_worksheet *self, lxw_row_t row_num,
+                               lxw_col_t col_num,
+                               lxw_data_validation *user_options)
+{
+    lxw_data_validation *copied_options;
+
+    /* Store the column options. */
+    copied_options = calloc(1, sizeof(lxw_data_validation));
+    RETURN_ON_MEM_ERROR(copied_options, LXW_ERROR_MEMORY_MALLOC_FAILED);
+
+    lxw_rowcol_to_cell(copied_options->sqref, row_num, col_num);
+
+    /* These options are on by default. */
+    copied_options->ignore_blank = user_options->ignore_blank ^ 1;
+    copied_options->show_input = user_options->show_input ^ 1;
+    copied_options->show_error = user_options->show_error ^ 1;
+
+    STAILQ_INSERT_TAIL(self->data_validations, copied_options, list_pointers);
+
+    self->num_validations++;
+
+    return LXW_NO_ERROR;
 }

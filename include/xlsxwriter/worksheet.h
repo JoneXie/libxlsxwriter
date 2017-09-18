@@ -140,6 +140,7 @@ struct lxw_table_rows {
 
 STAILQ_HEAD(lxw_merged_ranges, lxw_merged_range);
 STAILQ_HEAD(lxw_selections, lxw_selection);
+STAILQ_HEAD(lxw_data_validations, lxw_data_validation);
 STAILQ_HEAD(lxw_image_data, lxw_image_options);
 STAILQ_HEAD(lxw_chart_data, lxw_image_options);
 
@@ -228,6 +229,21 @@ typedef struct lxw_selection {
     STAILQ_ENTRY (lxw_selection) list_pointers;
 
 } lxw_selection;
+
+typedef struct lxw_data_validation {
+
+    uint8_t validate;
+    uint8_t criteria;
+    uint8_t ignore_blank;
+    uint8_t show_input;
+    uint8_t show_error;
+    int64_t value;
+
+    char sqref[LXW_MAX_CELL_RANGE_LENGTH];
+
+    STAILQ_ENTRY (lxw_data_validation) list_pointers;
+
+} lxw_data_validation;
 
 /**
  * @brief Options for inserted images
@@ -354,6 +370,7 @@ typedef struct lxw_worksheet {
     struct lxw_cell **array;
     struct lxw_merged_ranges *merged_ranges;
     struct lxw_selections *selections;
+    struct lxw_data_validations *data_validations;
     struct lxw_image_data *image_data;
     struct lxw_chart_data *chart_data;
 
@@ -1474,6 +1491,10 @@ lxw_error worksheet_merge_range(lxw_worksheet *worksheet, lxw_row_t first_row,
 lxw_error worksheet_autofilter(lxw_worksheet *worksheet, lxw_row_t first_row,
                                lxw_col_t first_col, lxw_row_t last_row,
                                lxw_col_t last_col);
+
+lxw_error worksheet_data_validation_cell(lxw_worksheet *worksheet,
+                                         lxw_row_t row_num, lxw_col_t col_num,
+                                         lxw_data_validation *user_options);
 
  /**
   * @brief Make a worksheet the active, i.e., visible worksheet.
@@ -2635,7 +2656,7 @@ STATIC void _worksheet_write_print_options(lxw_worksheet *worksheet);
 STATIC void _worksheet_write_sheet_pr(lxw_worksheet *worksheet);
 STATIC void _worksheet_write_tab_color(lxw_worksheet *worksheet);
 STATIC void _worksheet_write_sheet_protection(lxw_worksheet *worksheet);
-STATIC void _chart_write_data_validations(lxw_worksheet *self);
+STATIC void _worksheet_write_data_validations(lxw_worksheet *self);
 #endif /* TESTING */
 
 /* *INDENT-OFF* */
