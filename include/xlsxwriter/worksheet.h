@@ -76,12 +76,53 @@
 enum lxw_gridlines {
     /** Hide screen and print gridlines. */
     LXW_HIDE_ALL_GRIDLINES = 0,
+
     /** Show screen gridlines. */
     LXW_SHOW_SCREEN_GRIDLINES,
+
     /** Show print gridlines. */
     LXW_SHOW_PRINT_GRIDLINES,
+
     /** Show screen and print gridlines. */
     LXW_SHOW_ALL_GRIDLINES
+};
+
+/** Data validation property values. */
+enum lxw_validation_boolean {
+    LXW_VALIDATION_DEFAULT,
+
+    /** Turn a data validation property off. */
+    LXW_VALIDATION_OFF,
+
+    /** Turn a data validation property on. Data validation properties are
+     * generally on by default. */
+    LXW_VALIDATION_ON
+};
+
+enum lxw_validation_types {
+    LXW_VALIDATION_TYPE_NONE,
+    LXW_VALIDATION_TYPE_INTEGER,
+    LXW_VALIDATION_TYPE_INTEGER_FORMULA,
+    LXW_VALIDATION_TYPE_DECIMAL,
+    LXW_VALIDATION_TYPE_DECIMAL_FORMULA,
+    LXW_VALIDATION_TYPE_LIST,
+    LXW_VALIDATION_TYPE_DATE,
+    LXW_VALIDATION_TYPE_TIME,
+    LXW_VALIDATION_TYPE_LENGTH,
+    LXW_VALIDATION_TYPE_CUSTOM,
+    LXW_VALIDATION_TYPE_ANY
+};
+
+enum lxw_validation_criteria {
+    LXW_VALIDATION_CRITERIA_NONE,
+    LXW_VALIDATION_CRITERIA_EQUAL,
+    LXW_VALIDATION_CRITERIA_NOT_EQUAL,
+    LXW_VALIDATION_CRITERIA_LESS_THAN,
+    LXW_VALIDATION_CRITERIA_LESS_THAN_OR_EQUAL,
+    LXW_VALIDATION_CRITERIA_GREATER_THAN,
+    LXW_VALIDATION_CRITERIA_GREATER_THAN_OR_EQUAL,
+    LXW_VALIDATION_CRITERIA_BETWEEN,
+    LXW_VALIDATION_CRITERIA_NOT_BETWEEN
 };
 
 enum cell_types {
@@ -237,7 +278,12 @@ typedef struct lxw_data_validation {
     uint8_t ignore_blank;
     uint8_t show_input;
     uint8_t show_error;
-    int64_t value;
+
+    double value_number;
+    char *value_formula;
+
+    double maximum_number;
+    char *maximum_formula;
 
     char sqref[LXW_MAX_CELL_RANGE_LENGTH];
 

@@ -370,6 +370,7 @@ lxw_worksheet_free(lxw_worksheet *worksheet)
     if (worksheet->data_validations) {
         while (!STAILQ_EMPTY(worksheet->data_validations)) {
             data_validation = STAILQ_FIRST(worksheet->data_validations);
+            free(data_validation->value_formula);
             STAILQ_REMOVE_HEAD(worksheet->data_validations, list_pointers);
             free(data_validation);
         }
@@ -3332,9 +3333,44 @@ _write_drawings(lxw_worksheet *self)
  * Write the <formula1> element for numbers.
  */
 STATIC void
-_worksheet_write_formula_1_num(lxw_worksheet *self)
+_worksheet_write_formula1_num(lxw_worksheet *self, double number)
 {
-    lxw_xml_data_element(self->file, "formula1", "0", NULL);
+    char data[LXW_ATTR_32];
+
+    lxw_snprintf(data, LXW_ATTR_32, "%.16g", number);
+
+    lxw_xml_data_element(self->file, "formula1", data, NULL);
+}
+
+/*
+ * Write the <formula1> element for strings/formulas.
+ */
+STATIC void
+_worksheet_write_formula1_str(lxw_worksheet *self, char *str)
+{
+    lxw_xml_data_element(self->file, "formula1", str, NULL);
+}
+
+/*
+ * Write the <formula2> element for numbers.
+ */
+STATIC void
+_worksheet_write_formula2_num(lxw_worksheet *self, double number)
+{
+    char data[LXW_ATTR_32];
+
+    lxw_snprintf(data, LXW_ATTR_32, "%.16g", number);
+
+    lxw_xml_data_element(self->file, "formula2", data, NULL);
+}
+
+/*
+ * Write the <formula2> element for strings/formulas.
+ */
+STATIC void
+_worksheet_write_formula2_str(lxw_worksheet *self, char *str)
+{
+    lxw_xml_data_element(self->file, "formula2", str, NULL);
 }
 
 /*
@@ -3342,32 +3378,95 @@ _worksheet_write_formula_1_num(lxw_worksheet *self)
  */
 STATIC void
 _worksheet_write_data_validation(lxw_worksheet *self,
-                                 lxw_data_validation *data_validation)
+                                 lxw_data_validation *validation)
 {
     struct xml_attribute_list attributes;
     struct xml_attribute *attribute;
-    char type[] = "whole";
-    char operator[] = "greaterThan";
+    uint8_t is_between = 0;
 
     LXW_INIT_ATTRIBUTES();
-    LXW_PUSH_ATTRIBUTES_STR("type", type);
-    LXW_PUSH_ATTRIBUTES_STR("operator", operator);
 
-    if (data_validation->ignore_blank)
-        LXW_PUSH_ATTRIBUTES_STR("allowBlank", "1");
+    /* TODO. marker. */
+    switch (validation->validate) {
+        case LXW_VALIDATION_TYPE_INTEGER:
+        case LXW_VALIDATION_TYPE_INTEGER_FORMULA:
+            LXW_PUSH_ATTRIBUTES_STR("type", "whole");
+            break;
+        case LXW_VALIDATION_TYPE_DECIMAL:
+        case LXW_VALIDATION_TYPE_DECIMAL_FORMULA:
+            LXW_PUSH_ATTRIBUTES_STR("type", "decimal");
+            break;
+    }
 
-    if (data_validation->show_input)
-        LXW_PUSH_ATTRIBUTES_STR("showInputMessage", "1");
+    switch (validation->criteria) {
+        case LXW_VALIDATION_CRITERIA_EQUAL:
+            LXW_PUSH_ATTRIBUTES_STR("operator", "equal");
+            break;
+        case LXW_VALIDATION_CRITERIA_NOT_EQUAL:
+            LXW_PUSH_ATTRIBUTES_STR("operator", "notEqual");
+            break;
+        case LXW_VALIDATION_CRITERIA_LESS_THAN:
+            LXW_PUSH_ATTRIBUTES_STR("operator", "lessThan");
+            break;
+        case LXW_VALIDATION_CRITERIA_LESS_THAN_OR_EQUAL:
+            LXW_PUSH_ATTRIBUTES_STR("operator", "lessThanOrEqual");
+            break;
+        case LXW_VALIDATION_CRITERIA_GREATER_THAN:
+            LXW_PUSH_ATTRIBUTES_STR("operator", "greaterThan");
+            break;
+        case LXW_VALIDATION_CRITERIA_GREATER_THAN_OR_EQUAL:
+            LXW_PUSH_ATTRIBUTES_STR("operator", "greaterThanOrEqual");
+            break;
+        case LXW_VALIDATION_CRITERIA_BETWEEN:
+            /* Between is the default for 2 formulas and isn't added. */
+            is_between = 1;
+            break;
+        case LXW_VALIDATION_CRITERIA_NOT_BETWEEN:
+            is_between = 1;
+            LXW_PUSH_ATTRIBUTES_STR("operator", "notBetween");
+            break;
+    }
 
-    if (data_validation->show_error)
-        LXW_PUSH_ATTRIBUTES_STR("showErrorMessage", "1");
+    if (validation->ignore_blank)
+        LXW_PUSH_ATTRIBUTES_INT("allowBlank", 1);
 
-    LXW_PUSH_ATTRIBUTES_STR("sqref", data_validation->sqref);
+    if (validation->show_input)
+        LXW_PUSH_ATTRIBUTES_INT("showInputMessage", 1);
+
+    if (validation->show_error)
+        LXW_PUSH_ATTRIBUTES_INT("showErrorMessage", 1);
+
+    LXW_PUSH_ATTRIBUTES_STR("sqref", validation->sqref);
 
     lxw_xml_start_tag(self->file, "dataValidation", &attributes);
 
-    /* Write the formula_1 element. */
-    _worksheet_write_formula_1_num(self);
+    /* Write the formula1 element. */
+    switch (validation->validate) {
+        case LXW_VALIDATION_TYPE_INTEGER:
+        case LXW_VALIDATION_TYPE_DECIMAL:
+            _worksheet_write_formula1_num(self, validation->value_number);
+            break;
+        case LXW_VALIDATION_TYPE_INTEGER_FORMULA:
+        case LXW_VALIDATION_TYPE_DECIMAL_FORMULA:
+            _worksheet_write_formula1_str(self, validation->value_formula);
+            break;
+    }
+
+    if (is_between) {
+        /* Write the formula2 element. */
+        switch (validation->validate) {
+            case LXW_VALIDATION_TYPE_INTEGER:
+            case LXW_VALIDATION_TYPE_DECIMAL:
+                _worksheet_write_formula2_num(self,
+                                              validation->maximum_number);
+                break;
+            case LXW_VALIDATION_TYPE_INTEGER_FORMULA:
+            case LXW_VALIDATION_TYPE_DECIMAL_FORMULA:
+                _worksheet_write_formula2_str(self,
+                                              validation->maximum_formula);
+                break;
+        }
+    }
 
     lxw_xml_end_tag(self->file, "dataValidation");
 
@@ -5132,7 +5231,22 @@ worksheet_data_validation_cell(lxw_worksheet *self, lxw_row_t row_num,
 
     lxw_rowcol_to_cell(copied_options->sqref, row_num, col_num);
 
-    /* These options are on by default. */
+    copied_options->validate = user_options->validate;
+    copied_options->criteria = user_options->criteria;
+    copied_options->value_number = user_options->value_number;
+    copied_options->maximum_number = user_options->maximum_number;
+
+    if (user_options->validate == LXW_VALIDATION_TYPE_INTEGER_FORMULA) {
+        /* Strip leading "=" from formula. */
+        if (user_options->value_formula[0] == '=')
+            copied_options->value_formula =
+                lxw_strdup(user_options->value_formula + 1);
+        else
+            copied_options->value_formula =
+                lxw_strdup(user_options->value_formula);
+    }
+
+    /* These options are on by default so we can't take plain booleans. */
     copied_options->ignore_blank = user_options->ignore_blank ^ 1;
     copied_options->show_input = user_options->show_input ^ 1;
     copied_options->show_error = user_options->show_error ^ 1;
