@@ -15,11 +15,13 @@
 #include "xlsxwriter/utility.h"
 #include "xlsxwriter/relationships.h"
 
-#define LXW_STR_MAX      32767
-#define LXW_BUFFER_SIZE  4096
-#define LXW_PORTRAIT     1
-#define LXW_LANDSCAPE    0
-#define LXW_PRINT_ACROSS 1
+#define LXW_STR_MAX                     32767
+#define LXW_BUFFER_SIZE                 4096
+#define LXW_PORTRAIT                    1
+#define LXW_LANDSCAPE                   0
+#define LXW_PRINT_ACROSS                1
+#define LXW_MAX_VALIDATION_STR_LENGTH   255
+#define LXW_VALIDATION_STR_LENGTH       255 + 3 /* +3 for quotes and EOL. */
 
 /*
  * Forward declarations.
@@ -315,7 +317,6 @@ lxw_worksheet_free(lxw_worksheet *worksheet)
     }
 
     if (worksheet->hyperlinks) {
-
         for (row = RB_MIN(lxw_table_rows, worksheet->hyperlinks); row;
              row = next_row) {
 
@@ -371,6 +372,7 @@ lxw_worksheet_free(lxw_worksheet *worksheet)
         while (!STAILQ_EMPTY(worksheet->data_validations)) {
             data_validation = STAILQ_FIRST(worksheet->data_validations);
             free(data_validation->value_formula);
+            free(data_validation->maximum_formula);
             STAILQ_REMOVE_HEAD(worksheet->data_validations, list_pointers);
             free(data_validation);
         }
@@ -875,6 +877,56 @@ lxw_basename(const char *path)
         return forward_slash + 1;
     else
         return back_slash + 1;
+}
+
+/* Function to convert an array of strings into a CSV string for data
+ * validation lists. */
+char *
+_validation_list_to_csv(char **list)
+{
+    uint8_t i = 0;
+    size_t length = 0;
+    char *str;
+
+    /* Return NULL for empty lists. */
+    if (!list || !list[0])
+        return NULL;
+
+    /* Count the total concatenated length of the strings in the array,
+     * including commas.  */
+    while (list[i] && length <= LXW_MAX_VALIDATION_STR_LENGTH) {
+        length += 1 + strlen(list[i]);
+        i++;
+    }
+
+    /* Adjust the count for extraneous comma at end. */
+    length--;
+
+    /* Excel limits the total length to 255 chars. */
+    if (!length || length > LXW_MAX_VALIDATION_STR_LENGTH)
+        return NULL;
+
+    /* Create a buffer for the concatenated, and quoted, string. */
+    str = calloc(1, LXW_VALIDATION_STR_LENGTH);
+    if (!str)
+        return NULL;
+
+    /* Add the start quote and first element. */
+    strcat(str, "\"");
+    strcat(str, list[0]);
+
+    /* Add the other elements preceded by a comma. */
+    i = 1;
+    while (list[i]) {
+        strcat(str, ",");
+        strcat(str, list[i]);
+        i++;
+    }
+
+    /* Add the end quote. */
+    strcat(str, "\"");
+
+    return str;
 }
 
 /*****************************************************************************
@@ -3396,6 +3448,10 @@ _worksheet_write_data_validation(lxw_worksheet *self,
         case LXW_VALIDATION_TYPE_DECIMAL_FORMULA:
             LXW_PUSH_ATTRIBUTES_STR("type", "decimal");
             break;
+        case LXW_VALIDATION_TYPE_LIST:
+        case LXW_VALIDATION_TYPE_LIST_FORMULA:
+            LXW_PUSH_ATTRIBUTES_STR("type", "list");
+            break;
     }
 
     switch (validation->criteria) {
@@ -3448,6 +3504,9 @@ _worksheet_write_data_validation(lxw_worksheet *self,
             break;
         case LXW_VALIDATION_TYPE_INTEGER_FORMULA:
         case LXW_VALIDATION_TYPE_DECIMAL_FORMULA:
+            _worksheet_write_formula1_str(self, validation->value_formula);
+            break;
+        case LXW_VALIDATION_TYPE_LIST:
             _worksheet_write_formula1_str(self, validation->value_formula);
             break;
     }
@@ -5224,6 +5283,7 @@ worksheet_data_validation_cell(lxw_worksheet *self, lxw_row_t row_num,
                                lxw_data_validation *user_options)
 {
     lxw_data_validation *copied_options;
+    uint8_t is_between = 0;
 
     /* Store the column options. */
     copied_options = calloc(1, sizeof(lxw_data_validation));
@@ -5231,10 +5291,19 @@ worksheet_data_validation_cell(lxw_worksheet *self, lxw_row_t row_num,
 
     lxw_rowcol_to_cell(copied_options->sqref, row_num, col_num);
 
+    if (user_options->criteria == LXW_VALIDATION_CRITERIA_BETWEEN
+        || user_options->criteria == LXW_VALIDATION_CRITERIA_NOT_BETWEEN) {
+
+        copied_options->is_between = LXW_TRUE;
+        is_between = LXW_TRUE;
+    }
     copied_options->validate = user_options->validate;
     copied_options->criteria = user_options->criteria;
     copied_options->value_number = user_options->value_number;
     copied_options->maximum_number = user_options->maximum_number;
+
+    if (is_between)
+        copied_options->value_number = user_options->minimum_number;
 
     if (user_options->validate == LXW_VALIDATION_TYPE_INTEGER_FORMULA) {
         /* Strip leading "=" from formula. */
@@ -5244,6 +5313,11 @@ worksheet_data_validation_cell(lxw_worksheet *self, lxw_row_t row_num,
         else
             copied_options->value_formula =
                 lxw_strdup(user_options->value_formula);
+    }
+
+    if (user_options->validate == LXW_VALIDATION_TYPE_LIST) {
+        copied_options->value_formula =
+            _validation_list_to_csv(user_options->source_list);
     }
 
     /* These options are on by default so we can't take plain booleans. */

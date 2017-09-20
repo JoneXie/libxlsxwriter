@@ -110,13 +110,35 @@ CTEST(worksheet, write_data_validations03) {
     lxw_data_validation *data_validation = calloc(1, sizeof(lxw_data_validation));
     data_validation->validate = LXW_VALIDATION_TYPE_DECIMAL;
     data_validation->criteria = LXW_VALIDATION_CRITERIA_BETWEEN;
-    data_validation->value_number = 0.1;
+    data_validation->minimum_number = 0.1;
     data_validation->maximum_number = 0.5;
 
     lxw_worksheet *worksheet = lxw_worksheet_new(NULL);
     worksheet->file = testfile;
 
     worksheet_data_validation_cell(worksheet, CELL("A3"), data_validation);
+    _worksheet_write_data_validations(worksheet);
+
+    RUN_XLSX_STREQ(exp, got);
+
+    lxw_worksheet_free(worksheet);
+}
+
+
+CTEST(worksheet, write_data_validations04) {
+    char* got;
+    char exp[] = "<dataValidations count=\"1\"><dataValidation type=\"list\" allowBlank=\"1\" showInputMessage=\"1\" showErrorMessage=\"1\" sqref=\"A4\"><formula1>\"open,high,close\"</formula1></dataValidation></dataValidations>";
+    FILE* testfile = lxw_tmpfile(NULL);
+    char *list[] = {"open", "high", "close", NULL};
+
+    lxw_data_validation *data_validation = calloc(1, sizeof(lxw_data_validation));
+    data_validation->validate = LXW_VALIDATION_TYPE_LIST;
+    data_validation->source_list = list;
+
+    lxw_worksheet *worksheet = lxw_worksheet_new(NULL);
+    worksheet->file = testfile;
+
+    worksheet_data_validation_cell(worksheet, CELL("A4"), data_validation);
     _worksheet_write_data_validations(worksheet);
 
     RUN_XLSX_STREQ(exp, got);

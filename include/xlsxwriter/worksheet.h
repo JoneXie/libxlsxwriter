@@ -106,6 +106,7 @@ enum lxw_validation_types {
     LXW_VALIDATION_TYPE_DECIMAL,
     LXW_VALIDATION_TYPE_DECIMAL_FORMULA,
     LXW_VALIDATION_TYPE_LIST,
+    LXW_VALIDATION_TYPE_LIST_FORMULA,
     LXW_VALIDATION_TYPE_DATE,
     LXW_VALIDATION_TYPE_TIME,
     LXW_VALIDATION_TYPE_LENGTH,
@@ -278,12 +279,19 @@ typedef struct lxw_data_validation {
     uint8_t ignore_blank;
     uint8_t show_input;
     uint8_t show_error;
+    uint8_t is_between;
 
     double value_number;
     char *value_formula;
 
+    double minimum_number;
+    char *minimum_formula;
+
     double maximum_number;
     char *maximum_formula;
+
+    char **source_list;
+    char *source_formula;
 
     char sqref[LXW_MAX_CELL_RANGE_LENGTH];
 
